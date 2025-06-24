@@ -12,9 +12,12 @@ import {
   Eye,
   RefreshCw,
   AlertCircle,
-  Star
+  Star,
+  Brain,
+  Globe
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import ApiService from '@/services/apiService';
 
 interface MarketDashboardProps {
   apiKeys: { serpapi: string; gemini: string };
@@ -26,59 +29,62 @@ const MarketDashboard: React.FC<MarketDashboardProps> = ({ apiKeys }) => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const { toast } = useToast();
 
-  // Dados simulados para demonstração
-  const trendData = [
-    { name: 'Jan', volume: 4000, cpc: 2.4, tendencia: 85 },
-    { name: 'Fev', volume: 3000, cpc: 1.8, tendencia: 88 },
-    { name: 'Mar', volume: 5000, cpc: 2.8, tendencia: 92 },
-    { name: 'Abr', volume: 6000, cpc: 3.2, tendencia: 95 },
-    { name: 'Mai', volume: 8000, cpc: 2.9, tendencia: 98 },
-    { name: 'Jun', volume: 9500, cpc: 3.5, tendencia: 100 }
-  ];
+  const loadRealMarketData = async () => {
+    if (!apiKeys.serpapi || !apiKeys.gemini) {
+      toast({
+        title: "Erro de configuração",
+        description: "Chaves de API não configuradas corretamente.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-  const categoryData = [
-    { name: 'Pneus Aro 13', value: 35, color: '#3B82F6' },
-    { name: 'Pneus Aro 14', value: 28, color: '#10B981' },
-    { name: 'Pneus Aro 15', value: 22, color: '#F59E0B' },
-    { name: 'Pneus Aro 16+', value: 15, color: '#EF4444' }
-  ];
-
-  const topSearches = [
-    { term: 'pneu aro 13 barato', volume: 12500, trend: 'up', cpc: 1.85 },
-    { term: 'pneu 175/70 r13', volume: 9800, trend: 'up', cpc: 2.10 },
-    { term: 'pneu remold', volume: 8200, trend: 'down', cpc: 1.45 },
-    { term: 'pneu continental', volume: 7600, trend: 'up', cpc: 3.20 },
-    { term: 'pneu pirelli preço', volume: 6900, trend: 'up', cpc: 2.95 }
-  ];
-
-  const loadMarketData = async () => {
     setIsLoading(true);
-    console.log('Carregando dados do mercado...');
+    console.log('Iniciando coleta de dados reais do mercado...');
     
     try {
-      // Simular chamada para APIs
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      const apiService = new ApiService(apiKeys.serpapi, apiKeys.gemini);
+      const realData = await apiService.getMarketAnalysis();
       
-      setMarketData({
-        totalVolume: 156000,
-        avgCpc: 2.65,
-        competition: 0.82,
-        trends: trendData,
-        categories: categoryData,
-        topSearches: topSearches
-      });
+      // Processar dados para o dashboard
+      const processedData = {
+        totalVolume: realData.summary.topKeywords.reduce((acc: number, k: any) => acc + k.volume, 0),
+        avgCompetition: realData.summary.avgCompetition,
+        totalKeywords: realData.summary.totalKeywords,
+        keywordData: realData.keywordData,
+        aiInsights: realData.aiAnalysis,
+        timestamp: realData.timestamp,
+        
+        // Dados para gráficos
+        categoryData: realData.keywordData.map((item: any, index: number) => ({
+          name: item.keyword,
+          value: Math.floor((item.totalResults / 1000000) * 100) || 1,
+          volume: item.totalResults,
+          competition: item.adsCount,
+          color: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'][index % 7]
+        })),
+        
+        topSearches: realData.summary.topKeywords.map((item: any, index: number) => ({
+          term: item.keyword,
+          volume: item.volume,
+          trend: 'up',
+          competition: realData.keywordData.find((k: any) => k.keyword === item.keyword)?.adsCount || 0
+        }))
+      };
       
+      setMarketData(processedData);
       setLastUpdate(new Date());
       
       toast({
-        title: "Dados atualizados",
-        description: "Os dados do mercado foram carregados com sucesso!",
+        title: "Dados reais carregados!",
+        description: `Análise de ${realData.summary.totalKeywords} palavras-chave concluída com sucesso.`,
       });
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      
+    } catch (error: any) {
+      console.error('Erro ao carregar dados reais:', error);
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os dados do mercado.",
+        title: "Erro ao carregar dados",
+        description: error.message || "Não foi possível carregar os dados reais do mercado.",
         variant: "destructive",
       });
     } finally {
@@ -87,17 +93,40 @@ const MarketDashboard: React.FC<MarketDashboardProps> = ({ apiKeys }) => {
   };
 
   useEffect(() => {
-    loadMarketData();
-  }, []);
+    // Carregar dados reais na inicialização
+    if (apiKeys.serpapi && apiKeys.gemini) {
+      loadRealMarketData();
+    }
+  }, [apiKeys.serpapi, apiKeys.gemini]);
+
+  if (!marketData && !isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card className="p-8 text-center">
+          <CardContent>
+            <Globe className="h-16 w-16 mx-auto text-blue-600 mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Dados do Mercado</h3>
+            <p className="text-slate-600 mb-4">
+              Clique em "Carregar Dados Reais" para obter informações atualizadas do mercado de pneus.
+            </p>
+            <Button onClick={loadRealMarketData} className="bg-gradient-to-r from-blue-600 to-indigo-600">
+              <Search className="h-4 w-4 mr-2" />
+              Carregar Dados Reais
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header com botão de atualização */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Dashboard do Mercado</h2>
+          <h2 className="text-2xl font-bold text-slate-800">Dashboard do Mercado - Dados Reais</h2>
           <p className="text-slate-600">
-            Visão geral das tendências e oportunidades no mercado de pneus
+            Análise em tempo real do mercado de pneus baseada em dados do Google
           </p>
         </div>
         <div className="flex items-center space-x-3">
@@ -106,175 +135,209 @@ const MarketDashboard: React.FC<MarketDashboardProps> = ({ apiKeys }) => {
               Última atualização: {lastUpdate.toLocaleTimeString()}
             </span>
           )}
-          <Button onClick={loadMarketData} disabled={isLoading} className="space-x-2">
+          <Button onClick={loadRealMarketData} disabled={isLoading} className="space-x-2">
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Atualizar</span>
+            <span>{isLoading ? 'Carregando...' : 'Atualizar'}</span>
           </Button>
         </div>
       </div>
 
-      {/* Métricas principais */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-blue-600 text-sm font-medium">Volume Total</p>
-                <p className="text-2xl font-bold text-blue-900">156K</p>
-                <p className="text-xs text-blue-700 flex items-center mt-1">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  +12% vs mês anterior
-                </p>
-              </div>
-              <Search className="h-8 w-8 text-blue-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-green-600 text-sm font-medium">CPC Médio</p>
-                <p className="text-2xl font-bold text-green-900">R$ 2,65</p>
-                <p className="text-xs text-green-700 flex items-center mt-1">
-                  <TrendingDown className="h-3 w-3 mr-1" />
-                  -8% vs mês anterior
-                </p>
-              </div>
-              <DollarSign className="h-8 w-8 text-green-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-600 text-sm font-medium">Competição</p>
-                <p className="text-2xl font-bold text-orange-900">82%</p>
-                <p className="text-xs text-orange-700 flex items-center mt-1">
-                  <AlertCircle className="h-3 w-3 mr-1" />
-                  Alta competição
-                </p>
-              </div>
-              <Eye className="h-8 w-8 text-orange-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-purple-600 text-sm font-medium">Oportunidades</p>
-                <p className="text-2xl font-bold text-purple-900">24</p>
-                <p className="text-xs text-purple-700 flex items-center mt-1">
-                  <Star className="h-3 w-3 mr-1" />
-                  Palavras em alta
-                </p>
-              </div>
-              <TrendingUp className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Tendência de Volume */}
+      {isLoading && (
         <Card>
-          <CardHeader>
-            <CardTitle>Tendência de Volume de Buscas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip 
-                  formatter={(value, name) => [
-                    name === 'volume' ? `${value} buscas` : `R$ ${value}`,
-                    name === 'volume' ? 'Volume' : 'CPC'
-                  ]}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="volume" 
-                  stroke="#3B82F6" 
-                  strokeWidth={3}
-                  dot={{ fill: '#3B82F6' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <CardContent className="p-8 text-center">
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-blue-600 mb-4" />
+            <h3 className="text-lg font-medium mb-2">Coletando dados do mercado...</h3>
+            <p className="text-slate-600">
+              Buscando informações reais de volume, competição e tendências do mercado de pneus.
+              Isso pode levar alguns minutos.
+            </p>
           </CardContent>
         </Card>
+      )}
 
-        {/* Distribuição por Categoria */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Distribuição por Categoria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {categoryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Top Buscas */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Buscas do Mercado</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {topSearches.map((search, index) => (
-              <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Badge variant="outline" className="px-2 py-1">
-                    #{index + 1}
-                  </Badge>
-                  <span className="font-medium">{search.term}</span>
-                </div>
-                <div className="flex items-center space-x-4 text-sm">
-                  <span className="text-slate-600">
-                    {search.volume.toLocaleString()} buscas/mês
-                  </span>
-                  <span className="text-slate-600">
-                    R$ {search.cpc.toFixed(2)} CPC
-                  </span>
-                  <div className="flex items-center space-x-1">
-                    {search.trend === 'up' ? (
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <TrendingDown className="h-4 w-4 text-red-600" />
-                    )}
+      {marketData && (
+        <>
+          {/* Métricas principais */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-blue-600 text-sm font-medium">Volume Total</p>
+                    <p className="text-2xl font-bold text-blue-900">
+                      {(marketData.totalVolume / 1000000).toFixed(1)}M
+                    </p>
+                    <p className="text-xs text-blue-700 flex items-center mt-1">
+                      <TrendingUp className="h-3 w-3 mr-1" />
+                      Resultados encontrados
+                    </p>
                   </div>
+                  <Search className="h-8 w-8 text-blue-600" />
                 </div>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-green-600 text-sm font-medium">Competição Média</p>
+                    <p className="text-2xl font-bold text-green-900">
+                      {marketData.avgCompetition.toFixed(1)}
+                    </p>
+                    <p className="text-xs text-green-700 flex items-center mt-1">
+                      <Eye className="h-3 w-3 mr-1" />
+                      Anúncios por termo
+                    </p>
+                  </div>
+                  <DollarSign className="h-8 w-8 text-green-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-orange-600 text-sm font-medium">Palavras Analisadas</p>
+                    <p className="text-2xl font-bold text-orange-900">{marketData.totalKeywords}</p>
+                    <p className="text-xs text-orange-700 flex items-center mt-1">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Termos do mercado
+                    </p>
+                  </div>
+                  <Eye className="h-8 w-8 text-orange-600" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-purple-600 text-sm font-medium">Status IA</p>
+                    <p className="text-2xl font-bold text-purple-900">Ativo</p>
+                    <p className="text-xs text-purple-700 flex items-center mt-1">
+                      <Brain className="h-3 w-3 mr-1" />
+                      Análise Gemini
+                    </p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-purple-600" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Gráficos */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Volume por Categoria */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Volume por Palavra-chave</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={marketData.categoryData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={100}
+                      fontSize={12}
+                    />
+                    <YAxis />
+                    <Tooltip 
+                      formatter={(value: any, name: string) => [
+                        `${(value * 10000).toLocaleString()} resultados`,
+                        'Volume'
+                      ]}
+                    />
+                    <Bar dataKey="value" fill="#3B82F6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Distribuição de Competição */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Competição por Segmento</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={marketData.categoryData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, competition }) => `${name}: ${competition} ads`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="competition"
+                    >
+                      {marketData.categoryData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top Palavras-chave */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Palavras-chave do Mercado (Dados Reais)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {marketData.topSearches.map((search: any, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <Badge variant="outline" className="px-2 py-1">
+                        #{index + 1}
+                      </Badge>
+                      <span className="font-medium">{search.term}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-sm">
+                      <span className="text-slate-600">
+                        {search.volume.toLocaleString()} resultados
+                      </span>
+                      <span className="text-slate-600">
+                        {search.competition} anúncios
+                      </span>
+                      <div className="flex items-center space-x-1">
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Insights da IA */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <Brain className="h-5 w-5 text-purple-600" />
+                <span>Análise Inteligente do Mercado (Gemini AI)</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="p-4 bg-purple-50 rounded-lg">
+                <pre className="whitespace-pre-wrap text-purple-900 text-sm">
+                  {marketData.aiInsights}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 };

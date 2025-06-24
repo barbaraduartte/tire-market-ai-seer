@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,7 +34,7 @@ const Index = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const hasKeys = apiKeys.serpapi && apiKeys.gemini;
+    const hasKeys = Boolean(apiKeys.serpapi && apiKeys.gemini);
     setIsConfigured(hasKeys);
   }, [apiKeys]);
 

@@ -1,4 +1,3 @@
-
 interface SerpApiResponse {
   search_metadata: {
     status: string;
@@ -44,6 +43,63 @@ class ApiService {
   constructor(serpApiKey: string, geminiApiKey: string) {
     this.serpApiKey = serpApiKey;
     this.geminiApiKey = geminiApiKey;
+  }
+
+  async validateApiKeys(): Promise<{ valid: boolean; errors: string[] }> {
+    const errors: string[] = [];
+    
+    console.log('Validando chaves API...');
+    
+    // Validar SerpAPI
+    try {
+      const testQuery = 'test';
+      const serpUrl = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(testQuery)}&api_key=${this.serpApiKey}&num=1`;
+      
+      const serpResponse = await fetch(serpUrl);
+      const serpData = await serpResponse.json();
+      
+      if (serpData.error) {
+        errors.push(`SerpAPI: ${serpData.error}`);
+      } else if (!serpResponse.ok) {
+        errors.push(`SerpAPI: Erro ${serpResponse.status}`);
+      }
+    } catch (error) {
+      errors.push('SerpAPI: Chave inválida ou erro de conexão');
+    }
+
+    // Validar Gemini
+    try {
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${this.geminiApiKey}`;
+      
+      const geminiResponse = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: 'test'
+            }]
+          }],
+        }),
+      });
+
+      const geminiData = await geminiResponse.json();
+      
+      if (geminiData.error) {
+        errors.push(`Gemini AI: ${geminiData.error.message || 'Chave inválida'}`);
+      } else if (!geminiResponse.ok) {
+        errors.push(`Gemini AI: Erro ${geminiResponse.status}`);
+      }
+    } catch (error) {
+      errors.push('Gemini AI: Chave inválida ou erro de conexão');
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors
+    };
   }
 
   async searchSerpApi(query: string): Promise<SerpApiResponse> {
@@ -108,6 +164,100 @@ class ApiService {
     }
   }
 
+  async searchKeywords(keywords: string[]): Promise<any> {
+    console.log('Iniciando busca personalizada para:', keywords);
+    
+    const results = [];
+    
+    // Buscar dados para cada palavra-chave
+    for (const keyword of keywords) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Rate limit
+        const serpData = await this.searchSerpApi(keyword);
+        
+        results.push({
+          keyword,
+          totalResults: serpData.search_information?.total_results || 0,
+          adsCount: serpData.ads?.length || 0,
+          organicCount: serpData.organic_results?.length || 0,
+          relatedSearches: serpData.related_searches?.slice(0, 3) || [],
+          topAds: serpData.ads?.slice(0, 3) || [],
+          topOrganic: serpData.organic_results?.slice(0, 3) || []
+        });
+        
+        console.log(`Dados coletados para: ${keyword}`);
+      } catch (error) {
+        console.error(`Erro ao buscar dados para ${keyword}:`, error);
+        results.push({
+          keyword,
+          error: error.message,
+          totalResults: 0,
+          adsCount: 0,
+          organicCount: 0,
+          relatedSearches: [],
+          topAds: [],
+          topOrganic: []
+        });
+      }
+    }
+
+    // Análise com Gemini
+    const prompt = `
+    Analise os seguintes dados do mercado baseados na busca personalizada do usuário:
+
+    ${results.map(r => `
+    Palavra-chave: ${r.keyword}
+    Total de resultados: ${r.totalResults}
+    Número de anúncios: ${r.adsCount}
+    Buscas relacionadas: ${r.related_searches.map(s => s.query).join(', ')}
+    `).join('\n')}
+
+    Forneça uma análise detalhada incluindo:
+    1. Qual palavra-chave tem maior potencial
+    2. Nível de competição de cada termo
+    3. Oportunidades identificadas
+    4. Recomendações estratégicas específicas
+    5. Tendências do mercado observadas
+
+    Responda em português, de forma objetiva e profissional.
+    `;
+
+    try {
+      const geminiAnalysis = await this.analyzeWithGemini(prompt);
+      
+      return {
+        keywordData: results,
+        aiAnalysis: geminiAnalysis,
+        timestamp: new Date(),
+        searchQuery: keywords,
+        summary: {
+          totalKeywords: results.length,
+          avgCompetition: results.reduce((acc, r) => acc + r.adsCount, 0) / results.length,
+          topKeywords: results
+            .sort((a, b) => b.totalResults - a.totalResults)
+            .slice(0, 5)
+            .map(r => ({ keyword: r.keyword, volume: r.totalResults }))
+        }
+      };
+    } catch (error) {
+      console.error('Erro na análise com Gemini:', error);
+      return {
+        keywordData: results,
+        aiAnalysis: 'Análise de IA não disponível no momento.',
+        timestamp: new Date(),
+        searchQuery: keywords,
+        summary: {
+          totalKeywords: results.length,
+          avgCompetition: results.reduce((acc, r) => acc + r.adsCount, 0) / results.length,
+          topKeywords: results
+            .sort((a, b) => b.totalResults - a.totalResults)
+            .slice(0, 5)
+            .map(r => ({ keyword: r.keyword, volume: r.totalResults }))
+        }
+      };
+    }
+  }
+
   async getMarketAnalysis(): Promise<any> {
     console.log('Iniciando análise completa do mercado de pneus...');
     
@@ -163,7 +313,7 @@ class ApiService {
     Palavra-chave: ${r.keyword}
     Total de resultados: ${r.totalResults}
     Número de anúncios: ${r.adsCount}
-    Buscas relacionadas: ${r.relatedSearches.map(s => s.query).join(', ')}
+    Buscas relacionadas: ${r.related_searches.map(s => s.query).join(', ')}
     `).join('\n')}
 
     Por favor, forneça:

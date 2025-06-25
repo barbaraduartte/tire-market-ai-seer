@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,12 +18,15 @@ import {
   Settings,
   Zap,
   Brain,
-  Globe
+  Globe,
+  CheckCircle
 } from 'lucide-react';
 import ApiKeyManager from '@/components/ApiKeyManager';
 import MarketDashboard from '@/components/MarketDashboard';
 import SearchAnalyzer from '@/components/SearchAnalyzer';
+import CustomSearch from '@/components/CustomSearch';
 import ReportsSection from '@/components/ReportsSection';
+import ApiService from '@/services/apiService';
 
 const Index = () => {
   const [apiKeys, setApiKeys] = useState({
@@ -31,23 +35,52 @@ const Index = () => {
   });
   
   const [isConfigured, setIsConfigured] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const hasKeys = Boolean(apiKeys.serpapi && apiKeys.gemini);
-    setIsConfigured(hasKeys);
-  }, [apiKeys]);
-
-  const handleApiKeyUpdate = (keys: { serpapi: string; gemini: string }) => {
-    setApiKeys(keys);
-    localStorage.setItem('serpapi_key', keys.serpapi);
-    localStorage.setItem('gemini_key', keys.gemini);
+  const validateAndSetKeys = async (keys: { serpapi: string; gemini: string }) => {
+    setIsValidating(true);
     
-    toast({
-      title: "Chaves API atualizadas",
-      description: "As configurações foram salvas com sucesso!",
-    });
+    try {
+      const apiService = new ApiService(keys.serpapi, keys.gemini);
+      const validation = await apiService.validateApiKeys();
+      
+      if (validation.valid) {
+        setApiKeys(keys);
+        localStorage.setItem('serpapi_key', keys.serpapi);
+        localStorage.setItem('gemini_key', keys.gemini);
+        setIsConfigured(true);
+        
+        toast({
+          title: "Chaves validadas com sucesso!",
+          description: "Sistema pronto para análises em tempo real do mercado.",
+        });
+      } else {
+        setIsConfigured(false);
+        toast({
+          title: "Erro na validação",
+          description: "Uma ou ambas as chaves API são inválidas.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      setIsConfigured(false);
+      toast({
+        title: "Erro de validação",
+        description: "Não foi possível validar as chaves API.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsValidating(false);
+    }
   };
+
+  useEffect(() => {
+    // Verificar se as chaves existem e validá-las na inicialização
+    if (apiKeys.serpapi && apiKeys.gemini) {
+      validateAndSetKeys(apiKeys);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -70,13 +103,13 @@ const Index = () => {
               <Badge variant={isConfigured ? "default" : "secondary"} className="px-3 py-1">
                 {isConfigured ? (
                   <>
-                    <Zap className="h-3 w-3 mr-1" />
-                    Configurado
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    APIs Validadas
                   </>
                 ) : (
                   <>
                     <Settings className="h-3 w-3 mr-1" />
-                    Configuração Pendente
+                    Configuração Necessária
                   </>
                 )}
               </Badge>
@@ -86,20 +119,23 @@ const Index = () => {
       </header>
 
       <div className="container mx-auto px-6 py-8">
-        {!isConfigured ? (
+        {!isConfigured || isValidating ? (
           /* Configuration Section */
           <div className="max-w-2xl mx-auto">
             <Card className="shadow-lg border-0 bg-white/70 backdrop-blur-sm">
               <CardHeader className="text-center pb-2">
                 <CardTitle className="text-2xl font-bold text-slate-800 mb-2">
-                  Configuração Inicial
+                  {isValidating ? 'Validando APIs...' : 'Configuração Obrigatória'}
                 </CardTitle>
                 <p className="text-slate-600">
-                  Configure suas chaves de API para começar a analisar o mercado de pneus
+                  {isValidating 
+                    ? 'Verificando a validade das suas chaves API...'
+                    : 'Configure e valide suas chaves de API para acessar dados reais do mercado'
+                  }
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
-                <ApiKeyManager onApiKeysUpdate={handleApiKeyUpdate} initialKeys={apiKeys} />
+                <ApiKeyManager onApiKeysUpdate={validateAndSetKeys} initialKeys={apiKeys} />
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
                   <Card className="border-blue-100 bg-blue-50/50">
@@ -131,8 +167,15 @@ const Index = () => {
           </div>
         ) : (
           /* Main Application */
-          <Tabs defaultValue="dashboard" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-3 bg-white/70 backdrop-blur-sm">
+          <Tabs defaultValue="custom" className="space-y-6">
+            <TabsList className="grid w-full grid-cols-4 bg-white/70 backdrop-blur-sm">
+              <TabsTrigger 
+                value="custom" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Busca Personalizada
+              </TabsTrigger>
               <TabsTrigger 
                 value="dashboard" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
@@ -144,8 +187,8 @@ const Index = () => {
                 value="analyzer"
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
               >
-                <Search className="h-4 w-4 mr-2" />
-                Análise
+                <Target className="h-4 w-4 mr-2" />
+                Análise Individual
               </TabsTrigger>
               <TabsTrigger 
                 value="reports"
@@ -155,6 +198,10 @@ const Index = () => {
                 Relatórios
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="custom">
+              <CustomSearch apiKeys={apiKeys} />
+            </TabsContent>
 
             <TabsContent value="dashboard">
               <MarketDashboard apiKeys={apiKeys} />

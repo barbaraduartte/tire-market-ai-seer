@@ -19,12 +19,16 @@ import {
   Zap,
   Brain,
   Globe,
-  CheckCircle
+  CheckCircle,
+  Lightbulb
 } from 'lucide-react';
 import ApiKeyManager from '@/components/ApiKeyManager';
 import MarketDashboard from '@/components/MarketDashboard';
 import SearchAnalyzer from '@/components/SearchAnalyzer';
 import CustomSearch from '@/components/CustomSearch';
+import TrendAnalysis from '@/components/TrendAnalysis';
+import BrandComparator from '@/components/BrandComparator';
+import OpportunityDetector from '@/components/OpportunityDetector';
 import ReportsSection from '@/components/ReportsSection';
 import ApiService from '@/services/apiService';
 
@@ -76,7 +80,6 @@ const Index = () => {
   };
 
   useEffect(() => {
-    // Verificar se as chaves existem e validá-las na inicialização
     if (apiKeys.serpapi && apiKeys.gemini) {
       validateAndSetKeys(apiKeys);
     }
@@ -168,13 +171,34 @@ const Index = () => {
         ) : (
           /* Main Application */
           <Tabs defaultValue="custom" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-4 bg-white/70 backdrop-blur-sm">
+            <TabsList className="grid w-full grid-cols-6 bg-white/70 backdrop-blur-sm">
               <TabsTrigger 
                 value="custom" 
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
               >
                 <Search className="h-4 w-4 mr-2" />
                 Busca Personalizada
+              </TabsTrigger>
+              <TabsTrigger 
+                value="trends" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Tendências
+              </TabsTrigger>
+              <TabsTrigger 
+                value="brands"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <Target className="h-4 w-4 mr-2" />
+                Comparador
+              </TabsTrigger>
+              <TabsTrigger 
+                value="opportunities"
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
+              >
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Oportunidades
               </TabsTrigger>
               <TabsTrigger 
                 value="dashboard" 
@@ -184,17 +208,10 @@ const Index = () => {
                 Dashboard
               </TabsTrigger>
               <TabsTrigger 
-                value="analyzer"
-                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
-              >
-                <Target className="h-4 w-4 mr-2" />
-                Análise Individual
-              </TabsTrigger>
-              <TabsTrigger 
                 value="reports"
                 className="data-[state=active]:bg-blue-600 data-[state=active]:text-white"
               >
-                <TrendingUp className="h-4 w-4 mr-2" />
+                <Eye className="h-4 w-4 mr-2" />
                 Relatórios
               </TabsTrigger>
             </TabsList>
@@ -203,12 +220,20 @@ const Index = () => {
               <CustomSearch apiKeys={apiKeys} />
             </TabsContent>
 
-            <TabsContent value="dashboard">
-              <MarketDashboard apiKeys={apiKeys} />
+            <TabsContent value="trends">
+              <TrendAnalysis apiKeys={apiKeys} />
             </TabsContent>
 
-            <TabsContent value="analyzer">
-              <SearchAnalyzer apiKeys={apiKeys} />
+            <TabsContent value="brands">
+              <BrandComparator apiKeys={apiKeys} />
+            </TabsContent>
+
+            <TabsContent value="opportunities">
+              <OpportunityDetector apiKeys={apiKeys} />
+            </TabsContent>
+
+            <TabsContent value="dashboard">
+              <MarketDashboard apiKeys={apiKeys} />
             </TabsContent>
 
             <TabsContent value="reports">

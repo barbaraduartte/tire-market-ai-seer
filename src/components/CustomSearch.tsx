@@ -63,13 +63,18 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
       const apiService = new ApiService(apiKeys.serpapi, apiKeys.gemini);
       const results = await apiService.searchKeywords(keywords);
       
+      // Garantir que keywordData sempre existe como array
+      const keywordData = Array.isArray(results.keywordData) ? results.keywordData : [];
+      
       // Processar dados para visualização
       const processedResults = {
         ...results,
-        chartData: results.keywordData.map((item: any, index: number) => ({
-          name: item.keyword,
-          volume: Math.floor(item.totalResults / 1000),
-          competition: item.adsCount,
+        keywordData,
+        chartData: keywordData.map((item: any, index: number) => ({
+          name: item.keyword || `Termo ${index + 1}`,
+          volume: Math.floor((item.totalResults || 0) / 1000),
+          competition: item.adsCount || 0,
+          opportunity: item.opportunity || 'Baixa',
           color: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'][index % 7]
         }))
       };
@@ -168,7 +173,7 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
       </Card>
 
       {/* Resultados */}
-      {searchResults && (
+      {searchResults && searchResults.keywordData && (
         <div className="space-y-6">
           {/* Resumo */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -176,7 +181,7 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-slate-600">Total de Buscas</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {searchResults.summary.topKeywords.reduce((acc: number, k: any) => acc + k.volume, 0).toLocaleString()}
+                  {searchResults.keywordData.reduce((acc: number, k: any) => acc + (k.totalResults || 0), 0).toLocaleString()}
                 </p>
               </CardContent>
             </Card>
@@ -185,7 +190,7 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-slate-600">Competição Média</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {searchResults.summary.avgCompetition.toFixed(1)}
+                  {searchResults.summary?.avgCompetition?.toFixed(1) || '0.0'}
                 </p>
               </CardContent>
             </Card>
@@ -194,54 +199,58 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
               <CardContent className="p-4 text-center">
                 <p className="text-sm text-slate-600">Palavras Analisadas</p>
                 <p className="text-2xl font-bold text-purple-600">
-                  {searchResults.summary.totalKeywords}
+                  {searchResults.keywordData.length}
                 </p>
               </CardContent>
             </Card>
           </div>
 
           {/* Gráfico de volume */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Volume de Buscas por Palavra-chave</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={searchResults.chartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="name" 
-                    angle={-45} 
-                    textAnchor="end" 
-                    height={100}
-                    fontSize={12}
-                  />
-                  <YAxis />
-                  <Tooltip 
-                    formatter={(value: any) => [`${(value * 1000).toLocaleString()} buscas`, 'Volume']}
-                  />
-                  <Bar dataKey="volume" fill="#3B82F6" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {searchResults.chartData && searchResults.chartData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Volume de Buscas por Palavra-chave</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={searchResults.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-45} 
+                      textAnchor="end" 
+                      height={100}
+                      fontSize={12}
+                    />
+                    <YAxis />
+                    <Tooltip 
+                      formatter={(value: any) => [`${(value * 1000).toLocaleString()} buscas`, 'Volume']}
+                    />
+                    <Bar dataKey="volume" fill="#3B82F6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Análise da IA */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Brain className="h-5 w-5 text-purple-600" />
-                <span>Análise Personalizada (Gemini AI)</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <pre className="whitespace-pre-wrap text-purple-900 text-sm">
-                  {searchResults.aiAnalysis}
-                </pre>
-              </div>
-            </CardContent>
-          </Card>
+          {searchResults.aiAnalysis && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Brain className="h-5 w-5 text-purple-600" />
+                  <span>Análise Personalizada (Gemini AI)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="p-4 bg-purple-50 rounded-lg">
+                  <pre className="whitespace-pre-wrap text-purple-900 text-sm">
+                    {searchResults.aiAnalysis}
+                  </pre>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Detalhes por palavra-chave */}
           <Card>
@@ -253,24 +262,35 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
                 {searchResults.keywordData.map((item: any, index: number) => (
                   <div key={index} className="border rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-lg">{item.keyword}</h4>
-                      <Badge variant="outline">
-                        {item.totalResults.toLocaleString()} resultados
-                      </Badge>
+                      <h4 className="font-semibold text-lg">{item.keyword || `Termo ${index + 1}`}</h4>
+                      <div className="flex items-center space-x-2">
+                        <Badge variant="outline">
+                          {(item.totalResults || 0).toLocaleString()} resultados
+                        </Badge>
+                        {item.opportunity && (
+                          <Badge className={
+                            item.opportunity === 'Alta' ? 'bg-green-100 text-green-800' :
+                            item.opportunity === 'Média' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }>
+                            {item.opportunity} Oportunidade
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                       <div>
                         <p className="text-slate-600">Anúncios</p>
-                        <p className="font-medium">{item.adsCount}</p>
+                        <p className="font-medium">{item.adsCount || 0}</p>
                       </div>
                       <div>
                         <p className="text-slate-600">Resultados Orgânicos</p>
-                        <p className="font-medium">{item.organicCount}</p>
+                        <p className="font-medium">{item.organicCount || 0}</p>
                       </div>
                       <div>
-                        <p className="text-slate-600">Buscas Relacionadas</p>
-                        <p className="font-medium">{item.relatedSearches.length}</p>
+                        <p className="text-slate-600">Competição</p>
+                        <p className="font-medium">{item.competitionLevel || 'N/A'}</p>
                       </div>
                       <div>
                         <p className="text-slate-600">Status</p>
@@ -280,13 +300,13 @@ const CustomSearch: React.FC<CustomSearchProps> = ({ apiKeys }) => {
                       </div>
                     </div>
 
-                    {item.relatedSearches.length > 0 && (
+                    {item.relatedSearches && item.relatedSearches.length > 0 && (
                       <div>
                         <p className="text-sm font-medium text-slate-700 mb-1">Buscas relacionadas:</p>
                         <div className="flex flex-wrap gap-1">
-                          {item.relatedSearches.map((related: any, idx: number) => (
+                          {item.relatedSearches.slice(0, 4).map((related: any, idx: number) => (
                             <Badge key={idx} variant="outline" className="text-xs">
-                              {related.query}
+                              {related.query || `Relacionada ${idx + 1}`}
                             </Badge>
                           ))}
                         </div>
